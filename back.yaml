@@ -1,4 +1,4 @@
-# updated to 2025.7.2
+# updated to 2025.7.2 - Fixed API Config
 ################################################################################
 # Substitution Variables
 ################################################################################
@@ -6,7 +6,7 @@ substitutions:
   device_internal_name: espdisplay7
   device_wifi_name: esphome-19
   device_friendly_name: EspDisplay7
-  device_ip_address: 192.168.2.152
+  device_ip_address: !secret ip_address
   device_sampling_time: 30s
 
 ################################################################################
@@ -17,7 +17,6 @@ globals: ##to set default reboot behavior
     type: bool
     restore_value: no
     initial_value: "false"
-
 
 ################################################################################
 # Board Configuration
@@ -60,13 +59,12 @@ esp32:
     advanced:
       enable_idf_experimental_features: True
 
-
 ################################################################################
 # Enable logging
 ################################################################################
 logger:
-  logs:
-    component: ERROR
+  baud_rate: 0
+  level: ERROR
 
 ################################################################################
 # Enable Home Assistant API
@@ -75,6 +73,7 @@ api:
   reboot_timeout: 0s
   encryption:
     key: !secret api_encryption_key2
+  # Eliminada la línea 'keepalive' que causaba el error.
 
 ################################################################################
 # OTA
@@ -94,10 +93,21 @@ wifi:
     static_ip: ${device_ip_address}
     gateway: !secret gateway_address
     subnet: !secret subnet_address
+  power_save_mode: none
+  fast_connect: true
+# --- NUEVOS EVENTOS ---
+  on_connect:
+    - lvgl.label.update:
+        id: wifi_status_label
+        text: "Conectado a WiFi ✓"
+  on_disconnect:
+    - lvgl.label.update:
+        id: wifi_status_label
+        text: "Conectando a WiFi..."
+  # ----------------------
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    # ssid: ${device_wifi_name}
     password: !secret web_server_password
 
 captive_portal:
@@ -121,7 +131,7 @@ ch422g:
   - id: ch422g_hub
 
 ################################################################################
-# Switch
+# Switch (Lógica corregida para Temas LVGL)
 ################################################################################
 switch:
   - platform: restart
@@ -138,60 +148,175 @@ switch:
     pin:
       ch422g: ch422g_hub
       number: 2
-      mode:
-        output: true
+      mode: output
       inverted: false
     restore_mode: ALWAYS_ON
-  - platform: template
+
+  # Pruebas
+  - platform: homeassistant
     id: control_dispositivo_ha
     name: prueba
-    optimistic: true
-    turn_on_action:
-      - homeassistant.service:
-          service: light.turn_on
-          data:
-            entity_id: light.hexagon
-    turn_off_action:
-      - homeassistant.service:
-          service: light.turn_off
-          data:
-            entity_id: light.hexagon
+    entity_id: light.hexagon
+
+  # ================= TAB 1 =================
+
+  # 1. A/C (Botón id0)
+  - platform: homeassistant
+    id: mabe_fan
+    name: ac
+    entity_id: fan.mabe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id0), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id0), LV_STATE_CHECKED);
+
+  # 2. Pecera (Botón id1)
+  - platform: homeassistant
+    id: pecera_enchufe
+    name: pecera
+    entity_id: switch.pecera_enchufe_1
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id1), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id1), LV_STATE_CHECKED);
+
+  # 3. Luz Cuarto (Botón id2)
+  - platform: homeassistant
+    id: luz_cuarto
+    name: luzRoom
+    entity_id: switch.luz_cuarto_interruptor
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id2), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id2), LV_STATE_CHECKED);
+
+  # 4. Xiaomi TV (Botón id3)
+  - platform: homeassistant
+    id: tv_xiaomi
+    name: xiaomi
+    entity_id: remote.xiaomi
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id3), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id3), LV_STATE_CHECKED);
+
+  # 5. Reloj Awtrix (Botón id4)
+  - platform: homeassistant
+    id: clock_led
+    name: reloj
+    entity_id: light.awtrix_e159dc_matrix
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id4), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id4), LV_STATE_CHECKED);
+
+  # 6. Ambilight (Botón id5)
+  - platform: homeassistant
+    id: tv_ambilight
+    name: ambilight
+    entity_id: light.rgbic_tv_backlight_2
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id5), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id5), LV_STATE_CHECKED);
+
+  # 7. Home Theater (Botón id6)
+  - platform: homeassistant
+    id: home_theather
+    name: theather
+    entity_id: switch.aquila_enchufe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id6), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id6), LV_STATE_CHECKED);
+
+  # 8. Fish Pump (Botón id7)
+  - platform: homeassistant
+    id: aquarium_pump
+    name: fish_pump
+    entity_id: switch.waterpump_enchufe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id7), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id7), LV_STATE_CHECKED);
+
+  # 9. Led Bar (Botón id8)
+  - platform: homeassistant
+    id: led_barras
+    name: led_bar
+    entity_id: light.wled
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id8), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id8), LV_STATE_CHECKED);
+
+  # 10. Ducto (Botón id9)
+  - platform: homeassistant
+    id: ducto
+    name: ducto_enchufe
+    entity_id: switch.homeassistantpi_enchufe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id9), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id9), LV_STATE_CHECKED);
+
+  # 11. Humidifier (Botón id10)
+  - platform: homeassistant
+    id: smart_humidifier
+    name: humidifier
+    entity_id: humidifier.smart_humidifier
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id10), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id10), LV_STATE_CHECKED);
+
+  # 12. Air Purifier (Botón id11)
+  - platform: homeassistant
+    id: air_purifier
+    name: smar_purifier
+    entity_id: switch.air_purifier_power_switch
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id11), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id11), LV_STATE_CHECKED);
+
+  # ================= TAB 2 =================
+
+  # 13. Hex Led (Botón Tab2 id0)
+  - platform: homeassistant
+    id: hex_led
+    name: hex
+    entity_id: light.hexagon
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id0), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id0), LV_STATE_CHECKED);
 
 ################################################################################
-# Interval
+# Time
 ################################################################################
-interval:
-  - interval: 10s
-    then:
-      - if:
-          condition:
-            wifi.connected:
-          then:
-            - lambda: |-
-                id(wifi_connection) = true;
-          else:
-            - lambda: |-
-                id(wifi_connection) = false;
-
 time:
   - platform: homeassistant
     id: esptime
     on_time:
-      - seconds: "*"
+      # ACTUALIZA CADA SEGUNDO para mantener el motor LVGL despierto
+      - seconds: /1    
         then:
-          - script.execute: clock_update
+          - lvgl.label.update:
+              id: time_hour
+              text:
+                time_format: "%A %H:%M:%S"
+                time: !lambda return id(esptime).now();
 
 ################################################################################
 # Sensors
 ################################################################################
 sensor:
-  # WiFi
   - platform: wifi_signal
     name: "WiFi Signal Sensor"
     id: ${device_internal_name}_wifi_signal_sensor
     update_interval: ${device_sampling_time}
 
-  # Uptime
   - platform: uptime
     name: "Uptime Sensor"
     id: ${device_internal_name}_uptime_sensor
@@ -250,9 +375,6 @@ sensor:
 # Text Sensors
 ################################################################################
 text_sensor:
-  #-------------------------------------------------------------------------------
-  # ESP32 internal sensors
-  #-------------------------------------------------------------------------------
   - platform: wifi_info
     ip_address:
       name: IP Address
@@ -263,9 +385,7 @@ text_sensor:
     mac_address:
       name: Mac Wifi Address
       id: ${device_internal_name}_mac_address
-  #-------------------------------------------------------------------------------
-  # Custom Text sensors
-  #-------------------------------------------------------------------------------
+
   - platform: template
     name: Uptime Human Readable
     id: ${device_internal_name}_uptime_human
@@ -275,13 +395,74 @@ text_sensor:
     name: RTC
     id: label_clock
 
-
+################################################################################
+# Images
+################################################################################
 image:
-  - file: "image.png"
-    id: my_image
-    # resize: 320x480
+
+  - file: "images/homeassistant-logo.png"
+    id: ha_logo
+    resize: 800x480
     type: RGB565
 
+  - file: "images/Icons/air-conditioner-custom.png"
+    id: ac_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/fish-custom.png"
+    id: fish_icon
+    resize: 32x32
+    type: RGB565
+    transparency: alpha_channel
+  - file: "images/Icons/television-ambient-light-custom.png"
+    id: lr_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/lightbulb.png"
+    id: lightbulb_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/air-humidifier-custom.png"
+    id: humidifier_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/air-purifier-custom.png"
+    id: purifier_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/clock-digital-custom.png"
+    id: clock_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/hexagon-multiple-custom.png"
+    id: hexagon_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/hvac-custom.png"
+    id: hvac_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/theater-custom.png"
+    id: theater_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/led-strip-variant-custom.png"
+    id: led_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/remote-tv-custom.png"
+    id: tv_icon
+    resize: 32x32
+    type: RGB565
+  - file: "images/Icons/water-pump-custom.png"
+    id: pump_icon
+    resize: 32x32
+    type: RGB565
+
+    
+################################################################################
+# Colors
+################################################################################
 color:
   - id: my_red
     red: 100%
@@ -315,9 +496,34 @@ color:
     red: 0%
     green: 0%
     blue: 0%
+  - id: my_cards
+    red: 20%
+    green: 20%
+    blue: 20%
+  - id: my_cyan
+    hex: 4A90E2
 
+################################################################################
+# Fonts
+################################################################################
 
 font:
+# Fuente para textos pequeños (etiquetas)
+  - file: "gfonts://Roboto"
+    id: roboto_14
+    size: 14
+
+  # Fuente para textos normales (botones)
+  - file: "gfonts://Roboto"
+    id: roboto_16
+    size: 16
+
+  # Fuente GIGANTE para el reloj
+  - file: "gfonts://Roboto"
+    id: roboto_clock
+    size: 96
+    glyphs: "0123456789:AMP" # Solo cargamos números para no llenar la memoria
+  
   - file: "fonts/arial.ttf"
     id: arial_98
     size: 98
@@ -347,407 +553,393 @@ font:
     size: 10
     bpp: 4
 
-script:
-  - id: clock_update
-    then:
-      - lvgl.indicator.update:
-          id: second_hand
-          value: !lambda |-
-            return id(esptime).now().second;
-      - lvgl.indicator.update:
-          id: minute_hand
-          value: !lambda |-
-            return id(esptime).now().minute;
-      - lvgl.indicator.update:
-          id: hour_hand
-          value: !lambda |-
-            auto now = id(esptime).now();
-            return std::fmod(now.hour, 12) * 60 + now.minute;
-
-
-            
-
-
-
-############################################ START OF VLGL
-
-
+################################################################################
+# LVGL
+################################################################################
 lvgl:
-  log_level: none #INFO
+  log_level: none
   color_depth: 16
-  bg_color: my_gray
-  text_font: arial_12
-  width: 320
+  update_interval: 16ms
+  buffer_size: 25%       # REDUCIDO para mejorar latencia
+  text_font: roboto_14
+  width: 800
   height: 480
   align: center
   id: screen
-  style_definitions:
-    - id: date_style
-      align: center
-      text_color: 0x000000
-      bg_opa: cover
-      radius: 4
-      pad_all: 2
 
   theme:
     button:
-      scroll_on_focus: true
-      #group: general
-      border_width: 2
-      text_font: arial_24
-      outline_pad: 6
+      # --- ESTADO APAGADO ---
+      radius: 16
+      # IMPORTANTE: Intenta que este color sea IGUAL al fondo de tus iconos
+      # Si tus iconos son gris oscuro, pon este bg_color igual.
+      bg_color: 2763306      # Gris Oscuro (0x2A2A2A)
+      bg_opa: 100%
+      
+      border_width: 0        # Sin borde apagado
+      shadow_width: 0        # Sin sombra apagado (se ve plano/limpio)
+      text_color: 15658734   # Blanco hueso
+      
+      # --- EFECTO AL PULSAR ---
       pressed:
-        border_color: my_yellow
+        bg_color: 3552822    # Un gris un pelín más claro al tocar
+        transform_height: -2 # Pequeño rebote
+
+      # --- ESTADO ENCENDIDO (AQUÍ ESTÁ EL TRUCO) ---
       checked:
-        border_color: my_blue
-      focused:
-        border_color: my_gray
+        # Mantenemos el fondo gris para que no choque con tu icono
+        bg_color: 2763306    
+        
+        # Agregamos borde y sombra Cyan para indicar "ON"
+        border_width: 2
+        border_color: my_cyan
+        
+        # Efecto de luz de neón
+        shadow_width: 20
+        shadow_color: my_cyan
+        shadow_opa: 60%      # Resplandor fuerte
+        
+        text_color: my_cyan  # El texto también se ilumina
+
     label:
-      text_font: arial_24
-
-  msgboxes:
-  - id: message_box
-    close_button: true
-    title: Message box
-    body:
-      text: "This is a sample message box."
-      bg_color: my_black
-    buttons:
-      - id: msgbox_apply
-        text: "Apply"
-      - id: msgbox_close
-        text: "\uF00D"
-        on_click:
-          then:
-            - lvgl.widget.hide: message_box
-
+      text_font: roboto_14
 
   widgets:
     - obj:
-        height: 320
-        width: 480
+        height: 480
+        width: 800
         align: center
         pad_all: 0
         bg_opa: 0%
         widgets:
-        - button:  ########################## bottom buttons
-            x: 40
-            y: 260
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id1
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "10"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 10                
-                - lvgl.widget.redraw: 
-                
-        - button:
-            x: 120
-            y: 260
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id2
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "20"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 20                
-                - lvgl.widget.redraw: 
-        - button:
-            x: 200
-            y: 260
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id3
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "30"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 30                
-                - lvgl.widget.redraw: 
 
-        - button:
-            x: 280
-            y: 260
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id4
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "40"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 40                
-                - lvgl.widget.redraw: 
+        - tabview:
+            bg_color: my_black
+            text_color: my_white
+            text_font: roboto_16
+            id: paginador
+            tabs:
+              - name: "Eduardo Room"
+                widgets:
+                  - button:
+                      x: 10
+                      y: 10
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id0
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: ac_image
+                            src: ac_icon
+                            align: TOP_MID
+                        - label:
 
-        - button:
-            x: 360
-            y: 260
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id5
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "50"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 50                
-                - lvgl.widget.redraw: 
+                            align: BOTTOM_MID 
+                            text: "A/C"
+                      on_click:
+                        then:
+                          - switch.toggle: mabe_fan
+                  - button:
+                      x: 100
+                      y: 10
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id1
+                      checkable: true
+                      widgets:
+                        - image:
+                            id: fish_image
+                            src: fish_icon
+                            align: TOP_MID
+                            image_recolor: my_white
+                            image_recolor_opa: 100%                            
+                        - label:
 
-        - button:  ########################## top buttons
-            x: 40
-            y: 10
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id6
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "60"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 60                
-                - lvgl.widget.redraw: 
-                
-        - button:
-            x: 120
-            y: 10
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id7
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "70"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 70                
-                - lvgl.widget.redraw: 
-        - button:
-            x: 200
-            y: 10
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id8
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "80"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 80                
-                - lvgl.widget.redraw: 
+                            align: BOTTOM_MID 
+                            text: "Aquarium"
+                      on_click:
+                        then:
+                          - switch.toggle: pecera_enchufe
+                  - button:
+                      x: 190
+                      y: 10
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id2
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: lr_image
+                            src: lightbulb_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Luz Cuarto"
+                      on_click:
+                        then:
+                          - switch.toggle: luz_cuarto
+                  - button:
+                      x: 280
+                      y: 10
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id3
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: tv_image
+                            src: tv_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Xiaomi TV"
+                      on_click:
+                        then:
+                          - switch.toggle: tv_xiaomi                                          
+                  - button:
+                      x: 370
+                      y: 10
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id4
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: cl_image
+                            src: clock_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Clock"
+                      on_click:
+                        then:
+                          - switch.toggle: clock_led 
+                  - button:
+                      x: 10
+                      y: 100
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id5
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: aa_image
+                            src: lr_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "AmbiLight"
+                      on_click:
+                        then:
+                          - switch.toggle: tv_ambilight 
+                  - button:
+                      x: 100
+                      y: 100
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id6
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: hh_image
+                            src: theater_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Home Theater"
+                      on_click:
+                        then:
+                          - switch.toggle: home_theather 
+                  - button:
+                      x: 190
+                      y: 100
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id7
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: aq_image
+                            src: pump_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Aqua Pump"
+                      on_click:
+                        then:
+                          - switch.toggle: aquarium_pump 
+                  - button:
+                      x: 280
+                      y: 100
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id8
+                      
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: br_image
+                            src: led_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Led Bar"
+                      on_click:
+                        then:
+                          - switch.toggle: led_barras                                                                                                                                              
+                  - button:
+                      x: 370
+                      y: 100
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id9
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: hr_image
+                            src: hvac_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Ducto"
+                      on_click:
+                        then:
+                          - switch.toggle: ducto 
+                  - button:
+                      x: 460
+                      y: 10
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id10
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: hsr_image
+                            src: humidifier_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Humidifier"
+                      on_click:
+                        then:
+                          - switch.toggle: smart_humidifier 
+                  - button:
+                      x: 460
+                      y: 100
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab1_id11
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: pr_image
+                            src: purifier_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Purifier"
+                      on_click:
+                        then:
+                          - switch.toggle: air_purifier 
+                  - label:
+                      id: wifi_status_label
+                      text_color: my_white
+                      text_font: roboto_14
+                      x: 400
+                      y: 200
 
-        - button:
-            x: 280
-            y: 10
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id9
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "90"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 90                
-                - lvgl.widget.redraw: 
+                                                
 
-        - button:
-            x: 360
-            y: 10
-            #align: center
-            width: 50
-            height: 50
-            id: btn_id10
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "100"
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 100                
-                - lvgl.widget.redraw: 
-                - switch.toggle: control_dispositivo_ha
+              - name: "3D Room"
+                widgets:
+                  - label:
+                      align: center
+                      text: "Página de control"
+                  - button:
+                      x: 85
+                      y: 5
+                      #align: center
+                      width: 75
+                      height: 75
+                      id: btn_Tab2_id0
+                      #checkable: true
+                      widgets:
+                        - image:
+                            id: hex_image
+                            src: hexagon_icon
+                            align: TOP_MID
+                            bg_color: my_white
+                        - label:
+                            text_font: roboto_14
+                            align: BOTTOM_MID 
+                            text: "Hexagons"
+                      on_click:
+                        then:
+                          - switch.toggle: hex_led 
+              - name: "Ajustes"
+                widgets:
+                  - label:
+                      align: center
+                      text: "Página de ajustes"
 
-        # Example meter:
-        - meter:
-            #align: center
-            x: 230
-            y: 60
-            width: 200
-            height: 200
-            widgets:
-              - label:
-                  y: 30
-                  align: center
-                  text: "Test"
-            scales:
-              range_from: 0
-              range_to: 100
-              angle_range: 240
-              rotation: 150
-              ticks:
-                count: 51
-                length: 3
-                major:
-                  stride: 5
-                  length: 13
-                  label_gap: 13
-              indicators:
-                - line:
-                    id: soc_needle
-                    width: 2
-                    color: 0xFF0000
-                    r_mod: -4
-                    value: 88
-                - tick_style:
-                    start_value: -10
-                    end_value: 40
-                    color_start: 0x0000bd #FF0000
-                    color_end: 0xbd0000 #0000FF
+        - label:
+            x: 50
+            y: 50
+            width: 100
+            height: 80
+            align: center
+            text_font: roboto_clock
+            id: time_hour
+            text_color: my_white
 
-            # Example action:
-            on_click:
-              then:
-                - lvgl.indicator.update:
-                    id: soc_needle
-                    value: 0                
-                - lvgl.widget.redraw: 
+    
 
 
-        - obj: ######################################### Elegant Clock - https://community.home-assistant.io/t/esphome-elegant-lvgl-clock/772365
-            height: 200
-            width: 200
-            x: 20
-            y: 60
-            pad_all: 4
-            bg_opa: 0%
-            border_width: 0  
-            widgets:
-            - meter:
-                height: 100%
-                width: 100%
-                align: center
-                bg_color: my_white
-
-                scales:
-                  # Minor ticks
-                  - ticks:
-                      width: 2
-                      count: 61
-                      length: 10
-                      color: my_black
-                    range_from: 0
-                    range_to: 60
-                    angle_range: 360
-                    rotation: 270
-
-                    # Minuite hand
-                    indicators:
-                      - line:
-                          id: minute_hand
-                          width: 3
-                          color: my_black
-                          r_mod: -1
-                  # Major ticks
-                  - angle_range: 330
-                    rotation: 300
-                    range_from: 1
-                    range_to: 12
-                    ticks:
-                      width: 3
-                      count: 12
-                      length: 20
-                      color: my_black                       
-
-                  # Hour hand
-                  - angle_range: 360
-                    rotation: 270
-                    range_from: 0
-                    range_to: 720
-                    indicators:
-                      - line:
-                          id: hour_hand
-                          width: 4
-                          color: my_black
-                          r_mod: -40
-
-                  # Second hand
-                  - angle_range: 360
-                    rotation: 270
-                    range_from: 0
-                    range_to: 60
-                    indicators:
-                      - line:
-                          id: second_hand
-                          width: 2
-                          color: my_red
-                          r_mod: -10
-                on_click:
-                    - lvgl.widget.show: message_box
-         
-
-
-########################################################### END OF VLGL
-
-
+################################################################################
+# I2C
+################################################################################
 i2c:
   sda: GPIO08
   scl: GPIO09
   scan: True
   id: bus_a
 
-# Define display
+################################################################################
+# Display
+################################################################################
 display:
   - platform: rpi_dpi_rgb
     id: my_display
@@ -771,9 +963,6 @@ display:
     reset_pin:
       ch422g: ch422g_hub
       number: 3
-#    enable_pin:
-#      ch422g: ch422g_hub
-#      number: 2  
     hsync_back_porch: 8
     hsync_front_porch: 8
     hsync_pulse_width: 4
@@ -782,25 +971,28 @@ display:
     vsync_pulse_width: 4
     data_pins:
       red:
-        - 1         #r3
-        - 2         #r4
-        - 42        #r5
-        - 41        #r6
-        - 40        #r7
+        - 1
+        - 2
+        - 42
+        - 41
+        - 40
       blue:
-        - 14        #b3
-        - 38        #b4
-        - 18        #b5
-        - 17        #b6
-        - 10        #b7
+        - 14
+        - 38
+        - 18
+        - 17
+        - 10
       green:
-        - 39        #g2
-        - 0         #g3
-        - 45        #g4
-        - 48        #g5
-        - 47        #g6
-        - 21        #g7
+        - 39
+        - 0
+        - 45
+        - 48
+        - 47
+        - 21
 
+################################################################################
+# Touchscreen
+################################################################################
 touchscreen:
   platform: gt911
   id: my_touch
@@ -809,13 +1001,14 @@ touchscreen:
     ch422g: ch422g_hub
     number: 1
     mode: OUTPUT
-  on_touch:
-    - lambda: |-
-        ESP_LOGI("Touch", "Touch detected at x=%d, y=%d", touch.x, touch.y);
-  on_update:
-    - lambda: |-
-          for (auto touch: touches)  {
-              if (touch.state <= 2) {
-                ESP_LOGI("Touch points:", "id=%d x=%d, y=%d x.raw=%d, y.raw=%d", touch.id, touch.x, touch.y, touch.x_raw, touch.y_raw);
-              }
-          }  
+  # Logs comentados para ahorrar CPU
+  # on_touch:
+  #   - lambda: |-
+  #       ESP_LOGI("Touch", "Touch detected at x=%d, y=%d", touch.x, touch.y);
+  # on_update:
+  #   - lambda: |-
+  #         for (auto touch: touches)  {
+  #             if (touch.state <= 2) {
+  #               ESP_LOGI("Touch points:", "id=%d x=%d, y=%d x.raw=%d, y.raw=%d", touch.id, touch.x, touch.y, touch.x_raw, touch.y_raw);
+  #             }
+  #         }

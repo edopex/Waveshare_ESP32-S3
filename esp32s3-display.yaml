@@ -1,4 +1,4 @@
-# updated to 2025.7.2
+# updated to 2025.7.2 - Fixed API Config
 ################################################################################
 # Substitution Variables
 ################################################################################
@@ -18,6 +18,10 @@ globals: ##to set default reboot behavior
     restore_value: no
     initial_value: "false"
 
+  - id: screen_timeout_ms
+    type: int
+    restore_value: yes
+    initial_value: "20000"
 
 ################################################################################
 # Board Configuration
@@ -30,6 +34,13 @@ esphome:
     board_build.arduino.memory_type: qio_opi
     board_build.flash_mode: dio
     board_upload.maximum_ram_size: 524288
+# EL BLOQUE DEBE IR AQUÍ ADENTRO:
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          // Reseteamos el contador de actividad al arrancar
+          lv_disp_trig_activity(id(screen).get_disp());
 
 psram:
   mode: octal
@@ -47,34 +58,81 @@ esp32:
       CONFIG_FREERTOS_HZ: "1000"
       CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240: y
       CONFIG_ESPTOOLPY_FLASHMODE_QIO: y
-      CONFIG_ESPTOOLPY_FLASHFREQ_120M: y
-      CONFIG_SPIRAM_MODE_OCT: y
-      CONFIG_IDF_EXPERIMENTAL_FEATURES: y
+      # --- AJUSTE A 120MHZ ---
+      CONFIG_ESPTOOLPY_FLASHFREQ_120M: y 
       CONFIG_SPIRAM_SPEED_120M: y
-      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
-      CONFIG_SPIRAM_RODATA: y
-      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: y
-      #CONFIG_COMPILER_OPTIMIZATION_SIZE: y
-      CONFIG_COMPILER_OPTIMIZATION_PERF: y
-      #CONFIG_COMPILER_OPTIMIZATION_DEBUG: y
+      CONFIG_SPIRAM_MODE_OCT: y
+      # -----------------------
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: "y"
+      CONFIG_SPIRAM_RODATA: "y"
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      CONFIG_COMPILER_OPTIMIZATION_PERF: "y"
+      # --- ESTABILIDAD WIFI CRÍTICA ---
+      CONFIG_ESP32_WIFI_IRAM_OPT: "y"
+      CONFIG_ESP32_WIFI_RX_IRAM_OPT: "y"
+      CONFIG_ESP_WIFI_SLP_IRAM_OPT: "y"
+      CONFIG_ESP_WIFI_STA_DISCONNECTED_PM_ENABLE: "n"
+      CONFIG_ESP_WIFI_TASK_PINNED_TO_CORE_0: "y"
+      CONFIG_ESP_PHY_MAX_WIFI_TX_POWER: "20"
+      CONFIG_ESP32_WIFI_AMPDU_TX_ENABLED: "n"
+      CONFIG_ESP32_WIFI_AMPDU_RX_ENABLED: "n"
+      CONFIG_LWIP_TCP_MSS: "1460"
     advanced:
       enable_idf_experimental_features: True
-
-
 ################################################################################
 # Enable logging
 ################################################################################
 logger:
-  logs:
-    component: ERROR
+  level: DEBUG # Cambia de ERROR a WARN para ver qué está fallando justo antes de caerse
+  baud_rate: 115200
+#######################################
+#number
+#######################################
+number:
+  - platform: template
+    name: "Duracion Pantalla"
+    id: screen_timeout_number
+    min_value: 5
+    max_value: 300
+    step: 1
+    unit_of_measurement: "s"
+    initial_value: 20
+    restore_value: yes
+    set_action:
+      then:
+        - lambda: |-
+            id(screen_timeout_ms) = (int)(x * 1000);
+            
+            // Actualizar Slider visual
+            auto slider_ptr = id(timeout_slider);
+            lv_slider_set_value(slider_ptr, (int)x, LV_ANIM_ON);
+            
+            // Actualizar Label visual
+            char buf[16];
+            sprintf(buf, "%d seg", (int)x);
+            lv_label_set_text(id(timeout_display), buf);
+        - script.execute: screen_timer # Reinicia el tiempo con el nuevo valor
+
 
 ################################################################################
 # Enable Home Assistant API
 ################################################################################
 api:
   reboot_timeout: 0s
-  encryption:
-    key: !secret api_encryption_key2
+
+  on_client_connected:
+    - lambda: |-
+        auto icon = id(ha_status_widget);
+        lv_obj_set_style_img_recolor(icon, id(my_cyan), LV_PART_MAIN);
+        lv_obj_set_style_img_recolor_opa(icon, 255, LV_PART_MAIN);
+  on_client_disconnected:
+    - lambda: |-
+        auto icon = id(ha_status_widget);
+        lv_obj_set_style_img_recolor(icon, id(my_red), LV_PART_MAIN);
+        lv_obj_set_style_img_recolor_opa(icon, 255, LV_PART_MAIN);
+ #  encryption:
+ #    key: !secret api_encryption_key2
+  # Eliminada la línea 'keepalive' que causaba el error.
 
 ################################################################################
 # OTA
@@ -94,10 +152,32 @@ wifi:
     static_ip: ${device_ip_address}
     gateway: !secret gateway_address
     subnet: !secret subnet_address
+  power_save_mode: NONE
+  fast_connect: false
+  output_power: 20dBm   # Máxima potencia para el ESP32-S3
+# --- LÓGICA DE CAMBIO DE ICONO ---
+  on_connect:
+    - lambda: |-
+        // 1. Cambiar la imagen al icono "wifi_custom"
+        lv_img_set_src(id(wifi_widget), id(img_wifi_on));
+        // 2. Pintarlo de Cyan (Azul Neon)
+        lv_obj_set_style_img_recolor(id(wifi_widget), id(my_cyan), LV_PART_MAIN);
+        lv_obj_set_style_img_recolor_opa(id(wifi_widget), 255, LV_PART_MAIN);
+        // Añadir esto para el texto:
+        lv_obj_set_style_text_color(id(wifi_pct_label), id(my_cyan), LV_PART_MAIN);
+
+  on_disconnect:
+    - lambda: |-
+        // 1. Cambiar la imagen al icono "wifi cancel"
+        lv_img_set_src(id(wifi_widget), id(img_wifi_off));
+        // 2. Pintarlo de Rojo (Alerta)
+        lv_obj_set_style_img_recolor(id(wifi_widget), id(my_red), LV_PART_MAIN);
+        lv_obj_set_style_img_recolor_opa(id(wifi_widget), 255, LV_PART_MAIN);
+        lv_obj_set_style_text_color(id(wifi_pct_label), id(my_red), LV_PART_MAIN);
+  # ---------------------------------
 
   # Enable fallback hotspot (captive portal) in case wifi connection fails
   ap:
-    # ssid: ${device_wifi_name}
     password: !secret web_server_password
 
 captive_portal:
@@ -105,23 +185,22 @@ captive_portal:
 ################################################################################
 # Web Server
 ################################################################################
-web_server:
-  port: 80
-  version: 2
-  include_internal: true
-  auth:
-    username: !secret web_server_user
-    password: !secret web_server_password
-  local: true
+#web_server:
+#  port: 80
+#  version: 2
+#  include_internal: true
+#  auth:
+#    username: !secret web_server_user
+#    password: !secret web_server_password
+#  local: true
 
 ################################################################################
 # IO Extender
 ################################################################################
 ch422g:
   - id: ch422g_hub
-
 ################################################################################
-# Switch
+# Switch (Lógica corregida para Temas LVGL)
 ################################################################################
 switch:
   - platform: restart
@@ -138,60 +217,317 @@ switch:
     pin:
       ch422g: ch422g_hub
       number: 2
-      mode:
-        output: true
+      mode: output
       inverted: false
     restore_mode: ALWAYS_ON
-  - platform: template
+
+  # Pruebas
+  - platform: homeassistant
     id: control_dispositivo_ha
     name: prueba
-    optimistic: true
-    turn_on_action:
-      - homeassistant.service:
-          service: light.turn_on
-          data:
-            entity_id: light.hexagon
-    turn_off_action:
-      - homeassistant.service:
-          service: light.turn_off
-          data:
-            entity_id: light.hexagon
+    entity_id: light.hexagon
+
+  # ================= TAB 1 =================
+
+  # 1. A/C (Botón id0)
+  - platform: homeassistant
+    id: mabe_fan
+    name: ac
+    entity_id: fan.mabe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id0), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id0), LV_STATE_CHECKED);
+
+  # 2. Pecera (Botón id1)
+  - platform: homeassistant
+    id: pecera_enchufe
+    name: pecera
+    entity_id: switch.pecera_enchufe_1
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id1), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id1), LV_STATE_CHECKED);
+
+  # 3. Luz Cuarto (Botón id2)
+  - platform: homeassistant
+    id: luz_cuarto
+    name: luzRoom
+    entity_id: switch.luz_cuarto_interruptor
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id2), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id2), LV_STATE_CHECKED);
+
+  # 4. Xiaomi TV (Botón id3)
+  - platform: homeassistant
+    id: tv_xiaomi
+    name: xiaomi
+    entity_id: remote.xiaomi
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id3), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id3), LV_STATE_CHECKED);
+
+  # 5. Reloj Awtrix (Botón id4)
+  - platform: homeassistant
+    id: clock_led
+    name: reloj
+    entity_id: light.awtrix_e159dc_matrix
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id4), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id4), LV_STATE_CHECKED);
+
+  # 6. Ambilight (Botón id5)
+  - platform: homeassistant
+    id: tv_ambilight
+    name: ambilight
+    entity_id: light.rgbic_tv_backlight_2
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id5), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id5), LV_STATE_CHECKED);
+
+  # 7. Home Theater (Botón id6)
+  - platform: homeassistant
+    id: home_theather
+    name: theather
+    entity_id: switch.aquila_enchufe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id6), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id6), LV_STATE_CHECKED);
+
+  # 8. Fish Pump (Botón id7)
+  - platform: homeassistant
+    id: aquarium_pump
+    name: fish_pump
+    entity_id: switch.waterpump_enchufe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id7), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id7), LV_STATE_CHECKED);
+
+  # 9. Led Bar (Botón id8)
+  - platform: homeassistant
+    id: led_barras
+    name: led_bar
+    entity_id: light.wled
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id8), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id8), LV_STATE_CHECKED);
+
+  # 10. Ducto (Botón id9)
+  - platform: homeassistant
+    id: ducto
+    name: ducto_enchufe
+    entity_id: switch.homeassistantpi_enchufe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id9), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id9), LV_STATE_CHECKED);
+
+  # 11. Humidifier (Botón id10)
+  - platform: homeassistant
+    id: smart_humidifier
+    name: humidifier
+    entity_id: humidifier.smart_humidifier
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id10), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id10), LV_STATE_CHECKED);
+
+  # 12. Air Purifier (Botón id11)
+  - platform: homeassistant
+    id: air_purifier
+    name: smar_purifier
+    entity_id: switch.air_purifier_power_switch
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id11), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id11), LV_STATE_CHECKED);
+  # 12.1. PC (Botón id12)
+  - platform: homeassistant
+    id: pc_switch
+    name: pc
+    entity_id: switch.10012ef099
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id12), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id12), LV_STATE_CHECKED);
+  # 12.2. PC LAN (Botón id13)
+  - platform: homeassistant
+    id: pc_lan_switch
+    name: pc_lan
+    entity_id: switch.encender_pc
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id13), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id13), LV_STATE_CHECKED);
+
+  # ================= TAB 2 =================
+
+  # 13. Hex Led (Botón Tab2 id0)
+  - platform: homeassistant
+    id: hex_led
+    name: hex
+    entity_id: light.hexagon
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id0), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id0), LV_STATE_CHECKED);
+  # 14. BettaPump  (Botón Tab2 id1)
+  - platform: homeassistant
+    id: bettapump_enchufe
+    name: bettapump
+    entity_id: switch.mini_smart_plug_enchufe_1
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id1), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id1), LV_STATE_CHECKED);
+  # 15. BettaLight  (Botón Tab2 id2)
+  - platform: homeassistant
+    id: BettaLight_enchufe
+    name: BettaLight
+    entity_id: switch.mini_smart_plug_2_enchufe_1
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id2), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id2), LV_STATE_CHECKED);
+  # 16. Aquila  (Botón Tab2 id3)
+  - platform: homeassistant
+    id: aquila_enchufe
+    name: aquila
+    entity_id: switch.aquila_enchufe
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id3), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id3), LV_STATE_CHECKED);
+  # 17. CR10S  (Botón Tab2 id4)
+  - platform: homeassistant
+    id: cr10s_enchufe
+    name: cr10s
+    entity_id: switch.10012ef190
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id4), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id4), LV_STATE_CHECKED);
+  # 17. Anycubic  (Botón Tab2 id5)
+  - platform: homeassistant
+    id: anycubic_enchufe
+    name: anycubic
+    entity_id: switch.resina_enchufe_1
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id5), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id5), LV_STATE_CHECKED);
+  # 18. Gabinete  (Botón Tab2 id6)
+  - platform: homeassistant
+    id: gabinete_enchufe
+    name: gabinete
+    entity_id: light.gabinete
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id6), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id6), LV_STATE_CHECKED);
+         
+
 
 ################################################################################
-# Interval
+# Time
 ################################################################################
-interval:
-  - interval: 10s
-    then:
-      - if:
-          condition:
-            wifi.connected:
-          then:
-            - lambda: |-
-                id(wifi_connection) = true;
-          else:
-            - lambda: |-
-                id(wifi_connection) = false;
-
 time:
   - platform: homeassistant
     id: esptime
     on_time:
-      - seconds: "*"
+      - seconds: 0 # Se ejecuta solo cuando el segundo es exactamente 0 (cada minuto)
         then:
-          - script.execute: clock_update
+          - lvgl.label.update:
+              id: time_hour
+              text: !lambda |-
+                return id(esptime).now().strftime("%H:%M");
 
+script:
+  - id: screen_timer
+    mode: restart # Esto hace que cada vez que se llame, el tiempo empiece de cero
+    then:
+      - switch.turn_on: lcdbacklight
+      - delay: !lambda return id(screen_timeout_ms); # Usa tu variable global
+      - switch.turn_off: lcdbacklight
 ################################################################################
 # Sensors
 ################################################################################
 sensor:
-  # WiFi
+  - platform: adc
+    pin: 6
+    name: "Battery Voltage"
+    id: bat_voltage
+    update_interval: 5s
+    attenuation: 12db
+    filters:
+      # CALIBRACIÓN REAL:
+      # Mapeamos lo que lee el chip (0.121) a lo que dice tu tester (3.53)
+      - calibrate_linear:
+          - 0.0 -> 0.0
+          - 0.121 -> 3.53
+      - median:
+          window_size: 31
+          send_every: 1
+    on_value:
+      then:
+        - lambda: |-
+            float v = x;
+            if (v > 5.0 || v < 2.0) return;
+
+            // Ajustamos el rango de porcentaje para que sea más sensible
+            // 3.4V será 0% y 4.0V será 100% (rango útil real)
+            int pct = (int)((v - 3.4) * 166); 
+            
+            if (pct > 100) pct = 100;
+            if (pct < 0) pct = 0;
+
+            // Detección de carga: Si el voltaje sube solo un poco por el USB
+            if (v >= 3.60) { 
+              lv_label_set_text(id(bat_label_widget), "CHG");
+              lv_img_set_src(id(bat_icon_widget), id(img_bat_charging));
+              lv_obj_set_style_img_recolor(id(bat_icon_widget), id(my_green), LV_PART_MAIN);
+            } else {
+              lv_label_set_text_fmt(id(bat_label_widget), "%d%%", pct);
+              
+              if (pct >= 60) {
+                lv_img_set_src(id(bat_icon_widget), id(img_bat_100));
+                lv_obj_set_style_img_recolor(id(bat_icon_widget), id(my_white), LV_PART_MAIN);
+              } else if (pct >= 20) {
+                lv_img_set_src(id(bat_icon_widget), id(img_bat_50));
+                lv_obj_set_style_img_recolor(id(bat_icon_widget), id(my_yellow), LV_PART_MAIN);
+              } else {
+                lv_img_set_src(id(bat_icon_widget), id(img_bat_0));
+                lv_obj_set_style_img_recolor(id(bat_icon_widget), id(my_red), LV_PART_MAIN);
+              }
+            }
+
   - platform: wifi_signal
     name: "WiFi Signal Sensor"
     id: ${device_internal_name}_wifi_signal_sensor
     update_interval: ${device_sampling_time}
+  - platform: wifi_signal
+    name: "WiFi Signal Percent"
+    id: wifi_percent
+    update_interval: 20s
+    unit_of_measurement: "%"
+    # Esto convierte los dBm (negativos) a un porcentaje de 0 a 100
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    # Actualizamos el texto en pantalla cada vez que cambie la señal
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: wifi_pct_label
+            text: !lambda |-
+              return (to_string((int)x) + "%").c_str();
 
-  # Uptime
   - platform: uptime
     name: "Uptime Sensor"
     id: ${device_internal_name}_uptime_sensor
@@ -215,44 +551,58 @@ sensor:
                 (minutes ? to_string(minutes) + "m " : "") +
                 (to_string(seconds) + "s")
               ).c_str();
+  - platform: homeassistant
+    id: govee_temp
+    entity_id: sensor.wifi_thermometer_temperature
+    internal: true
+    filters:
+      - throttle: 30s
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: temp_val
+            text: !lambda return (to_string((int)x) + "°").c_str();
 
   - platform: homeassistant
-    id: battery_charging
-    entity_id: sensor.1be6e4_Battery_Power
+    id: govee_hum
+    entity_id: sensor.wifi_thermometer_humidity
     internal: true
+    filters:
+      - throttle: 35s
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: hum_val
+            text: !lambda return (to_string((int)x) + "%").c_str();
 
   - platform: homeassistant
-    id: grid_output
-    entity_id: sensor.grid_output
+    id: govee_temp_3d
+    entity_id: sensor.thermo_hygrometerrom_temperature
     internal: true
+    filters:
+      - throttle: 40s
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: temp_val_3d
+            text: !lambda return (to_string((int)x) + "°").c_str();
 
   - platform: homeassistant
-    id: grid_input
-    entity_id: sensor.grid_input
+    id: govee_hum_3d
+    entity_id: sensor.thermo_hygrometerrom_humidity
     internal: true
-
-  - platform: homeassistant
-    id: solar_gen
-    entity_id: sensor.1be6e4_ac_output_total_power
-    internal: true
-
-  - platform: homeassistant
-    id: home_use
-    entity_id: sensor.1be6e4_total_consumption_power
-    internal: true
-
-  - platform: homeassistant
-    id: battery_soc
-    entity_id: sensor.1be6e4_remaining_battery_capacity
-    internal: true
+    filters:
+      - throttle: 45s
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: hum_val_3d
+            text: !lambda return (to_string((int)x) + "%").c_str();
 
 ################################################################################
 # Text Sensors
 ################################################################################
 text_sensor:
-  #-------------------------------------------------------------------------------
-  # ESP32 internal sensors
-  #-------------------------------------------------------------------------------
   - platform: wifi_info
     ip_address:
       name: IP Address
@@ -263,9 +613,7 @@ text_sensor:
     mac_address:
       name: Mac Wifi Address
       id: ${device_internal_name}_mac_address
-  #-------------------------------------------------------------------------------
-  # Custom Text sensors
-  #-------------------------------------------------------------------------------
+
   - platform: template
     name: Uptime Human Readable
     id: ${device_internal_name}_uptime_human
@@ -275,13 +623,183 @@ text_sensor:
     name: RTC
     id: label_clock
 
+################################################################################
+# Images
+################################################################################
+image:
+  - file: "images/Icons/battery-charging.png"
+    id: img_bat_charging
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
 
-#image:
-  #- file: "images/background.png"
-    #id: my_image
-    # resize: 320x480
-    #type: RGB565
+  - file: "images/Icons/battery-high.png"     # Consigue un icono de batería llena
+    id: img_bat_100
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
 
+  - file: "images/Icons/battery-medium.png"   # Icono batería media
+    id: img_bat_50
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/battery-outline.png"  # Icono batería baja
+    id: img_bat_0
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+  - file: "images/Icons/clock.png" # Cambia la ruta si es necesario
+    id: clock_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+# Icono HA Conectado (puedes usar el mismo para ambos y solo cambiar color)
+  - file: "images/Icons/ha.png" # Asegúrate de tener este archivo
+    id: img_ha_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  # Icono cuando hay internet (Wifi Custom)
+  - file: "images/Icons/wifi-custom.png"
+    id: img_wifi_on
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  # Icono cuando NO hay internet (Wifi Cancel)
+  - file: "images/Icons/wifi-cancel-custom.png"
+    id: img_wifi_off
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/homeassistant-logo.png"
+    id: ha_logo
+    resize: 800x480
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/air-conditioner-custom.png"
+    id: ac_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/fish-custom.png"
+    id: fish_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/television-ambient-light-custom.png"
+    id: lr_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/lightbulb.png"
+    id: lightbulb_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/air-humidifier-custom.png"
+    id: humidifier_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/air-purifier-custom.png"
+    id: purifier_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/clock-digital-custom.png"
+    id: clock_icon_digital
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/hexagon-multiple-custom.png"
+    id: hexagon_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/hvac-custom.png"
+    id: hvac_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/theater-custom.png"
+    id: theater_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/led-strip-variant-custom.png"
+    id: led_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/remote-tv-custom.png"
+    id: tv_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/water-pump-custom.png"
+    id: pump_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/water-percent-custom.png"
+    id: humedad_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/thermometer-custom.png"
+    id: temperatura_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/pc.png"
+    id: pc_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/lan.png"
+    id: lan_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/3d.png"
+    id: i3d_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/anycubic.png"
+    id: anycubic_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+    
+################################################################################
+# Colors
+################################################################################
 color:
   - id: my_red
     red: 100%
@@ -315,9 +833,43 @@ color:
     red: 0%
     green: 0%
     blue: 0%
+  - id: my_cards
+    red: 20%
+    green: 20%
+    blue: 20%
+  - id: my_cyan
+    hex: 4A90E2
 
+################################################################################
+# Fonts
+################################################################################
 
 font:
+# Tamaño MUY pequeño (para etiquetas debajo de iconos)
+  - file: "gfonts://Montserrat"
+    id: ui_font_10
+    size: 10
+    bpp: 4  # Suavizado de bordes (Antialiasing)
+
+  # Tamaño pequeño/normal
+  - file: "gfonts://Montserrat"
+    id: ui_font_12
+    size: 12
+    bpp: 4
+
+  # Tamaño normal (para títulos o ajustes)
+  - file: "gfonts://Montserrat"
+    id: ui_font_16
+    size: 16
+    bpp: 4
+    
+
+  # Reloj Gigante (Números finos se ven mejor)
+  - file: "gfonts://Montserrat"
+    id: font_clock
+    size: 48
+    glyphs: "0123456789:AMP"
+    bpp: 4
   - file: "fonts/arial.ttf"
     id: arial_98
     size: 98
@@ -347,71 +899,59 @@ font:
     size: 10
     bpp: 4
 
-script:
-  - id: clock_update
-    then:
-      - lambda: |-
-          char buf[9];
-          auto now = id(esptime).now();
-          snprintf(buf, sizeof(buf), "%02d:%02d:%02d", now.hour, now.minute, now.second);
-          auto str = std::string(buf);
-
-
-            
-
-
-
-############################################ START OF VLGL
-
-
+################################################################################
+# LVGL
+################################################################################
 lvgl:
-  log_level: none #INFO
+  log_level: none
   color_depth: 16
-  bg_color: my_black
-  text_font: arial_12
+  buffer_size: 5%       # REDUCIDO para mejorar latencia
+  update_interval: 1000ms
+  text_font: ui_font_16
   width: 800
   height: 480
   align: center
   id: screen
-  style_definitions:
-    - id: date_style
-      align: center
-      text_color: 0x000000
-      bg_opa: cover
-      radius: 4
-      pad_all: 2
+
+
+
 
   theme:
     button:
-      scroll_on_focus: true
-      #group: general
-      border_width: 3
-      text_font: arial_24
-      outline_pad: 6
+      # --- ESTADO APAGADO ---
+      radius: 16
+      # IMPORTANTE: Intenta que este color sea IGUAL al fondo de tus iconos
+      # Si tus iconos son gris oscuro, pon este bg_color igual.
+      bg_color: 2763306      # Gris Oscuro (0x2A2A2A)
+      bg_opa: 100%
+      
+      border_width: 0        # Sin borde apagado
+      shadow_width: 0        # Sin sombra apagado (se ve plano/limpio)
+      text_color: 15658734   # Blanco hueso
+      
+      # --- EFECTO AL PULSAR ---
       pressed:
-        border_color: my_white
-      checked:
-        border_color: my_blue
-      focused:
-        border_color: my_gray
-    label:
-      text_font: arial_24
+        bg_color: 3552822    # Un gris un pelín más claro al tocar
+        transform_height: -2 # Pequeño rebote
 
-  msgboxes:
-  - id: message_box
-    close_button: true
-    title: Message box
-    body:
-      text: "This is a sample message box."
-      bg_color: my_black
-    buttons:
-      - id: msgbox_apply
-        text: "Apply"
-      - id: msgbox_close
-        text: "\uF00D"
-        on_click:
-          then:
-            - lvgl.widget.hide: message_box
+      # --- ESTADO ENCENDIDO (AQUÍ ESTÁ EL TRUCO) ---
+      checked:
+        # Mantenemos el fondo gris para que no choque con tu icono
+        bg_color: 2763306    
+        
+        # Agregamos borde y sombra Cyan para indicar "ON"
+        border_width: 2
+        border_color: my_cyan
+        
+        # Efecto de luz de neón
+        shadow_width: 20
+        shadow_color: my_cyan
+        shadow_opa: 60%      # Resplandor fuerte
+        
+        text_color: my_cyan  # El texto también se ilumina
+
+    label:
+      text_font: ui_font_12
 
 
   widgets:
@@ -422,69 +962,299 @@ lvgl:
         pad_all: 0
         bg_opa: 0%
         widgets:
-        - button:  ########################## bottom buttons
-            x: 5
-            y: 5
-            #align: center
-            width: 75
-            height: 75
-            id: btn_id1
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "10"
-            on_click:
-              then:
-                - switch.toggle: control_dispositivo_ha
 
+        - tabview:
+            bg_color: my_black
+            text_color: my_black
+            text_font: ui_font_16
+            id: paginador
+            tab_style:
+                bg_color: my_black
+                text_color: my_white
+                text_font: ui_font_16 # Usamos la fuente 16 para que se lea bien
+                pad_top: 10
+                pad_bottom: 5
                 
-        - button:
-            x: 85
-            y: 5
-            #align: center
-            width: 75
-            height: 75
-            id: btn_id10
-            #checkable: true
-            widgets:
-              - label:
-                  align: center
-                  text: "HEX"
-            on_click:
-              then:
-                - switch.toggle: control_dispositivo_ha
+                # CORRECCIÓN AQUÍ: Quitamos "state_"
+            checked:
+                text_color: my_cyan
+                bg_color: my_black
+                
+                # 1. Quitamos el borde que se encimaba
+                border_width: 0
+                
+                # 2. Creamos una "Sombra" que parece una línea
+                shadow_width: 0       # 0 = Sombra dura (sin borrosidad)
+                shadow_spread: 3      # Grosor de la línea (3px)
+                shadow_color: my_cyan # Color neón
+                shadow_opa: 100%      # Opacidad total
+                
+                # 3. La movemos hacia abajo (Eje Y) para alejarla del texto
+                shadow_ofs_y: 15      # <--- JUEGA CON ESTE VALOR
+                shadow_ofs_x: 0
+            tabs:
+              - name: "Eduardo Room"
+                widgets:
+                  # --- FILA 1 (y: 20) ---
+                  - { button: { x: 60, y: 20, width: 90, height: 90, id: btn_Tab1_id0, widgets: [ {image: {src: ac_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "A/C", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: mabe_fan] } } }
+                  - { button: { x: 200, y: 20, width: 90, height: 90, id: btn_Tab1_id1, checkable: true, widgets: [ {image: {src: fish_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Aquarium", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pecera_enchufe] } } }
+                  - { button: { x: 340, y: 20, width: 90, height: 90, id: btn_Tab1_id2, widgets: [ {image: {src: lightbulb_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Luz Cuarto", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: luz_cuarto] } } }
+                  - { button: { x: 480, y: 20, width: 90, height: 90, id: btn_Tab1_id3, widgets: [ {image: {src: tv_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Xiaomi TV", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: tv_xiaomi] } } }
+                  - { button: { x: 620, y: 20, width: 90, height: 90, id: btn_Tab1_id4, widgets: [ {image: {src: clock_icon_digital, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Clock", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: clock_led] } } }
+
+                  # --- FILA 2 (y: 130) ---
+                  - { button: { x: 60, y: 130, width: 90, height: 90, id: btn_Tab1_id5, widgets: [ {image: {src: lr_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "AmbiLight", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: tv_ambilight] } } }
+                  - { button: { x: 200, y: 130, width: 90, height: 90, id: btn_Tab1_id6, widgets: [ {image: {src: theater_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Theater", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: home_theather] } } }
+                  - { button: { x: 340, y: 130, width: 90, height: 90, id: btn_Tab1_id7, widgets: [ {image: {src: pump_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Aqua Pump", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: aquarium_pump] } } }
+                  - { button: { x: 480, y: 130, width: 90, height: 90, id: btn_Tab1_id8, widgets: [ {image: {src: led_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Led Bar", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: led_barras] } } }
+                  - { button: { x: 620, y: 130, width: 90, height: 90, id: btn_Tab1_id9, widgets: [ {image: {src: hvac_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Ducto", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: ducto] } } }
+
+                  # --- FILA 3 (y: 240) ---
+                  - { button: { x: 130, y: 240, width: 90, height: 90, id: btn_Tab1_id10, widgets: [ {image: {src: humidifier_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Humidifier", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: smart_humidifier] } } }
+                  - { button: { x: 270, y: 240, width: 90, height: 90, id: btn_Tab1_id11, widgets: [ {image: {src: purifier_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Purifier", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: air_purifier] } } }
+                  - { button: { x: 410, y: 240, width: 90, height: 90, id: btn_Tab1_id12, widgets: [ {image: {src: pc_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "PC", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pc_switch] } } }
+                  - { button: { x: 550, y: 240, width: 90, height: 90, id: btn_Tab1_id13, widgets: [ {image: {src: lan_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "PC LAN", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pc_lan_switch] } } }
+
+                                                
+
+              - name: "3D Room"
+                widgets:
+                  - { button: { x: 60, y: 20, width: 90, height: 90, id: btn_Tab2_id0, widgets: [{image: {src: hexagon_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Hexagons", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: hex_led]} } }
+                  - { button: { x: 200, y: 20, width: 90, height: 90, id: btn_Tab2_id1, widgets: [{image: {src: pump_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "BettaPump", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: bettapump_enchufe]} } }
+                  - { button: { x: 340, y: 20, width: 90, height: 90, id: btn_Tab2_id2, widgets: [{image: {src: fish_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "BettaLight", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: BettaLight_enchufe]} } }
+                  - { button: { x: 480, y: 20, width: 90, height: 90, id: btn_Tab2_id3, widgets: [{image: {src: i3d_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Aquila", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: aquila_enchufe]} } }
+                  - { button: { x: 620, y: 20, width: 90, height: 90, id: btn_Tab2_id4, widgets: [{image: {src: i3d_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Cr10S", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: cr10s_enchufe]} } }
+                  - { button: { x: 270, y: 130, width: 90, height: 90, id: btn_Tab2_id5, widgets: [{image: {src: anycubic_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Anycubic", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: anycubic_enchufe]} } }
+                  - { button: { x: 410, y: 130, width: 90, height: 90, id: btn_Tab2_id6, widgets: [{image: {src: led_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Gabinete", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: gabinete_enchufe]} } }
+              - name: "Ajustes"
+                widgets:
+                  - label:
+                      text: "Tiempo Pantalla:"
+                      x: 20
+                      y: 20
+                      text_font: ui_font_16
+
+                  - slider:
+                      id: timeout_slider
+                      x: 20
+                      y: 60
+                      width: 600
+                      height: 20
+                      min_value: 5     # Empezamos en 5 segundos
+                      max_value: 300   # Hasta 2 minutos (puedes subirlo a 300 si quieres)
+                      value: 20        # Valor inicial
+                      on_value:
+                        then:
+                          # Cuando mueves el slider, actualizas el 'number' 
+                          # y este a su vez ejecuta el lambda de arriba
+                          - number.set:
+                              id: screen_timeout_number
+                              value: !lambda return x;
+
+                  - label:
+                      id: timeout_display
+                      x: 650          # Justo a la par del slider
+                      y: 62            # Ajustado para centrar con el slider
+                      text: "20 seg"   # Texto inicial
+                      text_font: ui_font_16
+                      text_color: my_white
+                  - button:
+                      x: 20
+                      y: 200
+                      width: 150
+                      height: 40
+                      widgets:
+                        - label: {text: "REINICIAR ESP", align: center}
+                      on_click:
+                        then:
+                          - switch.turn_on: device_restart
 
 
+# --- BARRA DE ESTADO INFERIOR (Ajustada para iconos de 50px) ---
+
+# 1. STATUS HOME ASSISTANT
+        - image:
+            id: ha_status_widget
+            src: img_ha_icon
+            x: 15
+            y: 415 # Subimos un poco para que el icono de 50px no se corte
+            width: 50
+            height: 50
+            image_recolor: my_red
+            image_recolor_opa: 100%
+            align: TOP_LEFT
+
+# 2. INDICADOR WIFI
+        - image:
+            id: wifi_widget
+            src: img_wifi_off
+            x: 75 # Espacio para el icono anterior
+            y: 415
+            width: 50
+            height: 50
+            image_recolor: my_red
+            image_recolor_opa: 100%
+            align: TOP_LEFT
 
         - label:
-            x: 50
-            y: 50
-            width: 100
-            height: 80
-            align: center
-            text_font: arial_96
-            id: digital_clock_label
-            text_color: my_white         
+            id: wifi_pct_label
+            text: "0%"
+            x: 125 # A la par del icono wifi
+            y: 430 # Centrado verticalmente respecto al icono de 50px
+            text_font: ui_font_16
+            text_color: my_white
+            align: TOP_LEFT
+
+# 3. SENSORES EDUARDO ROOM (Temperatura + Humedad)
+        - image:
+            src: temperatura_icon
+            x: 175
+            y: 415
+            width: 50
+            height: 50
+            image_recolor: my_cyan
+            image_recolor_opa: 100%
+            align: TOP_LEFT
+        - label:
+            id: temp_val
+            text: "--°"
+            x: 220
+            y: 430
+            text_font: ui_font_16
+            text_color: my_white
+            align: TOP_LEFT
+
+        - image:
+            src: humedad_icon
+            x: 255
+            y: 415
+            width: 50
+            height: 50
+            image_recolor: my_cyan
+            image_recolor_opa: 100%
+            align: TOP_LEFT
+        - label:
+            id: hum_val
+            text: "--%"
+            x: 300
+            y: 430
+            text_font: ui_font_16
+            text_color: my_white
+            align: TOP_LEFT
+
+# 4. SENSORES 3D ROOM (Icono Room + Temp + Hum)
+        - image:
+            src: i3d_icon 
+            x: 350
+            y: 415
+            width: 50
+            height: 50
+            image_recolor: my_yellow # Color distinto para diferenciar habitaciones
+            image_recolor_opa: 100%
+            align: TOP_LEFT
+
+        - image:
+            src: temperatura_icon
+            x: 410
+            y: 415
+            width: 50
+            height: 50
+            image_recolor: my_yellow
+            image_recolor_opa: 100%
+            align: TOP_LEFT
+        - label:
+            id: temp_val_3d
+            text: "--°"
+            x: 455
+            y: 430
+            text_font: ui_font_16
+            text_color: my_white
+            align: TOP_LEFT
+
+        - image:
+            src: humedad_icon
+            x: 490
+            y: 415
+            width: 50
+            height: 50
+            image_recolor: my_yellow
+            image_recolor_opa: 100%
+            align: TOP_LEFT
+        - label:
+            id: hum_val_3d
+            text: "--%"
+            x: 535
+            y: 430
+            text_font: ui_font_16
+            text_color: my_white
+            align: TOP_LEFT
+# --- BATERÍA (Encima del Reloj) ---
+        - image:
+            id: bat_icon_widget
+            src: img_bat_50
+            x: -70          # Un poco a la izquierda del texto
+            y: 365          # 50px ARRIBA del reloj
+            width: 50
+            height: 50
+            image_recolor: my_white
+            image_recolor_opa: 100%
+            align: TOP_RIGHT
+
+        - label:
+            id: bat_label_widget
+            text: "--%"
+            x: -25          # Pegado al borde derecho
+            y: 380          # Centrado verticalmente con el icono
+            text_font: ui_font_16 # Letra pequeña pero legible
+            text_color: my_white
+            align: TOP_RIGHT
+# --- SECCIÓN DEL RELOJ (Extremo Derecho con Icono) ---
+        - image:
+            id: clock_icon_status
+            src: clock_icon # Asegúrate que este ID apunte a tu clock.png en la sección image
+            x: -160         # Lo movemos a la izquierda del texto del reloj
+            y: 415          # Alineado con los otros iconos de 50px
+            width: 50
+            height: 50
+            image_recolor: my_white
+            image_recolor_opa: 100%
+            align: TOP_RIGHT
+
+        - label:
+            id: time_hour
+            text: "00:00"
+            x: -15
+            y: 410
+            width: 150      # Reducimos un poco el ancho para que no choque con el icono
+            height: 60
+            align: TOP_RIGHT
+            text_font: font_clock
+            text_color: my_white
+            text_align: RIGHT
 
 
-########################################################### END OF VLGL
+    
 
 
+################################################################################
+# I2C
+################################################################################
 i2c:
   sda: GPIO08
   scl: GPIO09
   scan: True
   id: bus_a
 
-# Define display
+################################################################################
+# Display
+################################################################################
 display:
   - platform: rpi_dpi_rgb
     id: my_display
     update_interval: never
     auto_clear_enabled: false
     color_order: RGB
-    pclk_frequency: 16MHZ
+    pclk_frequency: 14MHZ
     dimensions:
       width: 800
       height: 480
@@ -501,36 +1271,36 @@ display:
     reset_pin:
       ch422g: ch422g_hub
       number: 3
-#    enable_pin:
-#      ch422g: ch422g_hub
-#      number: 2  
-    hsync_back_porch: 8
-    hsync_front_porch: 8
-    hsync_pulse_width: 4
-    vsync_back_porch: 16
-    vsync_front_porch: 16
-    vsync_pulse_width: 4
+    hsync_back_porch: 40
+    hsync_front_porch: 40
+    hsync_pulse_width: 48
+    vsync_back_porch: 32
+    vsync_front_porch: 32
+    vsync_pulse_width: 16
     data_pins:
       red:
-        - 1         #r3
-        - 2         #r4
-        - 42        #r5
-        - 41        #r6
-        - 40        #r7
+        - 1
+        - 2
+        - 42
+        - 41
+        - 40
       blue:
-        - 14        #b3
-        - 38        #b4
-        - 18        #b5
-        - 17        #b6
-        - 10        #b7
+        - 14
+        - 38
+        - 18
+        - 17
+        - 10
       green:
-        - 39        #g2
-        - 0         #g3
-        - 45        #g4
-        - 48        #g5
-        - 47        #g6
-        - 21        #g7
+        - 39
+        - 0
+        - 45
+        - 48
+        - 47
+        - 21
 
+################################################################################
+# Touchscreen
+################################################################################
 touchscreen:
   platform: gt911
   id: my_touch
@@ -539,13 +1309,18 @@ touchscreen:
     ch422g: ch422g_hub
     number: 1
     mode: OUTPUT
+# --- ESTO ES LO QUE ENCIENDE LA PANTALLA ---
   on_touch:
-    - lambda: |-
-        ESP_LOGI("Touch", "Touch detected at x=%d, y=%d", touch.x, touch.y);
-  on_update:
-    - lambda: |-
-          for (auto touch: touches)  {
-              if (touch.state <= 2) {
-                ESP_LOGI("Touch points:", "id=%d x=%d, y=%d x.raw=%d, y.raw=%d", touch.id, touch.x, touch.y, touch.x_raw, touch.y_raw);
-              }
-          }  
+    then:
+      - script.execute: screen_timer
+  # Logs comentados para ahorrar CPU
+  # on_touch:
+  #   - lambda: |-
+  #       ESP_LOGI("Touch", "Touch detected at x=%d, y=%d", touch.x, touch.y);
+  # on_update:
+  #   - lambda: |-
+  #         for (auto touch: touches)  {
+  #             if (touch.state <= 2) {
+  #               ESP_LOGI("Touch points:", "id=%d x=%d, y=%d x.raw=%d, y.raw=%d", touch.id, touch.x, touch.y, touch.x_raw, touch.y_raw);
+  #             }
+  #         }
