@@ -293,7 +293,7 @@ switch:
   - platform: homeassistant
     id: home_theather
     name: theather
-    entity_id: switch.aquila_enchufe
+    entity_id: switch.home_theather
     on_turn_on:
       - lambda: lv_obj_add_state(id(btn_Tab1_id6), LV_STATE_CHECKED);
     on_turn_off:
@@ -352,7 +352,7 @@ switch:
   - platform: homeassistant
     id: pc_switch
     name: pc
-    entity_id: switch.10012ef099
+    entity_id: switch.pcgaming_pc_gaming_outlet
     on_turn_on:
       - lambda: lv_obj_add_state(id(btn_Tab1_id12), LV_STATE_CHECKED);
     on_turn_off:
@@ -366,6 +366,24 @@ switch:
       - lambda: lv_obj_add_state(id(btn_Tab1_id13), LV_STATE_CHECKED);
     on_turn_off:
       - lambda: lv_obj_clear_state(id(btn_Tab1_id13), LV_STATE_CHECKED);
+    # 12.3. VolumeUp (Botón id14)
+  - platform: homeassistant
+    id: homeUp
+    name: Up
+    entity_id: switch.home_theather_up
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id14), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id14), LV_STATE_CHECKED);
+      # 12.4. VolumeDown (Botón id15)
+  - platform: homeassistant
+    id: homeDown
+    name: Down
+    entity_id: switch.home_theather_down
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id15), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id15), LV_STATE_CHECKED);
 
   # ================= TAB 2 =================
 
@@ -409,7 +427,7 @@ switch:
   - platform: homeassistant
     id: cr10s_enchufe
     name: cr10s
-    entity_id: switch.10012ef190
+    entity_id: switch.cr10s_office_equipment_outlet
     on_turn_on:
       - lambda: lv_obj_add_state(id(btn_Tab2_id4), LV_STATE_CHECKED);
     on_turn_off:
@@ -796,6 +814,18 @@ image:
     type: RGB565
     transparency: alpha_channel
 
+  - file: "images/Icons/volumeDown.png"
+    id: imgVolDown
+    resize: 24x24
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/volumeUp.png"
+    id: imgVolUp
+    resize: 24x24
+    type: RGB565
+    transparency: alpha_channel
+
     
 ################################################################################
 # Colors
@@ -1014,6 +1044,9 @@ lvgl:
                   - { button: { x: 270, y: 240, width: 90, height: 90, id: btn_Tab1_id11, widgets: [ {image: {src: purifier_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Purifier", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: air_purifier] } } }
                   - { button: { x: 410, y: 240, width: 90, height: 90, id: btn_Tab1_id12, widgets: [ {image: {src: pc_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "PC", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pc_switch] } } }
                   - { button: { x: 550, y: 240, width: 90, height: 90, id: btn_Tab1_id13, widgets: [ {image: {src: lan_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "PC LAN", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pc_lan_switch] } } }
+                # --- Volume ---
+                  - { button: { x: 10, y: 240, width: 55, height: 55, id: btn_Tab1_id14, widgets: [ {image: {src: imgVolUp, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Up", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: homeUp] } } }
+                  - { button: { x: 700, y: 240, width: 55, height: 55, id: btn_Tab1_id15, widgets: [ {image: {src: imgVolDown, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Down", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: homeDown] } } }
 
                                                 
 
