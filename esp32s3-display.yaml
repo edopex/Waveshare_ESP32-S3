@@ -450,7 +450,55 @@ switch:
       - lambda: lv_obj_add_state(id(btn_Tab2_id6), LV_STATE_CHECKED);
     on_turn_off:
       - lambda: lv_obj_clear_state(id(btn_Tab2_id6), LV_STATE_CHECKED);
-         
+  # 19. Betta2Light  (Botón Tab1 id17)
+  - platform: homeassistant
+    id: betta2_enchufe
+    name: betta2
+    entity_id: switch.mini_smart_plug_3_enchufe_1
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id17), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id17), LV_STATE_CHECKED);
+  # 20. Luz Techo  (Botón Tab1 id18)
+  - platform: homeassistant
+    id: techo_enchufe
+    name: techo
+    entity_id: light.luz_techo
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab1_id18), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab1_id18), LV_STATE_CHECKED);
+  # 21. Sunlus1  (Botón Tab2 id7)
+  - platform: homeassistant
+    id: sunlu_enchufe
+    name: sunlu
+    entity_id: switch.sunlus1_encendido_secador
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id7), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id7), LV_STATE_CHECKED);
+
+  # 22. pixel  (Botón Tab2 id8)
+  - platform: homeassistant
+    id: pixel_enchufe
+    name: pixel
+    entity_id: switch.gaming_pixel_light_power_switch
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id8), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id8), LV_STATE_CHECKED);
+  # 23. server  (Botón Tab2 id9)
+  - platform: homeassistant
+    id: monitor_enchufe
+    name: servermonitor
+    entity_id: light.server_monitor_brillo_pantalla
+    on_turn_on:
+      - lambda: lv_obj_add_state(id(btn_Tab2_id9), LV_STATE_CHECKED);
+    on_turn_off:
+      - lambda: lv_obj_clear_state(id(btn_Tab2_id9), LV_STATE_CHECKED);
+
+      
+#Entidades         
 
 
 ################################################################################
@@ -469,11 +517,22 @@ time:
 
 script:
   - id: screen_timer
-    mode: restart # Esto hace que cada vez que se llame, el tiempo empiece de cero
+    mode: restart
     then:
+      # --- 1. DESPERTAR ---
       - switch.turn_on: lcdbacklight
-      - delay: !lambda return id(screen_timeout_ms); # Usa tu variable global
+      
+      # El escudo táctil: Esperamos 300 milisegundos para que retires el dedo
+      - delay: 300ms 
+      
+      # Ahora sí, ocultamos la capa negra y revelamos el dashboard
+      - lambda: 'lv_obj_add_flag(id(blackout_screen), LV_OBJ_FLAG_HIDDEN);'
+      
+      - delay: !lambda return id(screen_timeout_ms);
+      
+      # --- 2. DORMIR ---
       - switch.turn_off: lcdbacklight
+      - lambda: 'lv_obj_clear_flag(id(blackout_screen), LV_OBJ_FLAG_HIDDEN);'
 ################################################################################
 # Sensors
 ################################################################################
@@ -826,6 +885,18 @@ image:
     type: RGB565
     transparency: alpha_channel
 
+  - file: "images/Icons/monitor.png"
+    id: monitor_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
+  - file: "images/Icons/pixel.png"
+    id: pixel_icon
+    resize: 50x50
+    type: RGB565
+    transparency: alpha_channel
+
     
 ################################################################################
 # Colors
@@ -1025,25 +1096,26 @@ lvgl:
             tabs:
               - name: "Eduardo Room"
                 widgets:
-                  # --- FILA 1 (y: 20) ---
+                # --- FILA 1 (y: 20) ---
                   - { button: { x: 60, y: 20, width: 90, height: 90, id: btn_Tab1_id0, widgets: [ {image: {src: ac_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "A/C", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: mabe_fan] } } }
                   - { button: { x: 200, y: 20, width: 90, height: 90, id: btn_Tab1_id1, checkable: true, widgets: [ {image: {src: fish_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Aquarium", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pecera_enchufe] } } }
                   - { button: { x: 340, y: 20, width: 90, height: 90, id: btn_Tab1_id2, widgets: [ {image: {src: lightbulb_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Luz Cuarto", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: luz_cuarto] } } }
                   - { button: { x: 480, y: 20, width: 90, height: 90, id: btn_Tab1_id3, widgets: [ {image: {src: tv_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Xiaomi TV", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: tv_xiaomi] } } }
                   - { button: { x: 620, y: 20, width: 90, height: 90, id: btn_Tab1_id4, widgets: [ {image: {src: clock_icon_digital, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Clock", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: clock_led] } } }
 
-                  # --- FILA 2 (y: 130) ---
+                # --- FILA 2 (y: 130) ---
                   - { button: { x: 60, y: 130, width: 90, height: 90, id: btn_Tab1_id5, widgets: [ {image: {src: lr_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "AmbiLight", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: tv_ambilight] } } }
                   - { button: { x: 200, y: 130, width: 90, height: 90, id: btn_Tab1_id6, widgets: [ {image: {src: theater_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Theater", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: home_theather] } } }
                   - { button: { x: 340, y: 130, width: 90, height: 90, id: btn_Tab1_id7, widgets: [ {image: {src: pump_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Aqua Pump", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: aquarium_pump] } } }
                   - { button: { x: 480, y: 130, width: 90, height: 90, id: btn_Tab1_id8, widgets: [ {image: {src: led_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Led Bar", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: led_barras] } } }
                   - { button: { x: 620, y: 130, width: 90, height: 90, id: btn_Tab1_id9, widgets: [ {image: {src: hvac_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Ducto", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: ducto] } } }
 
-                  # --- FILA 3 (y: 240) ---
+                # --- FILA 3 (y: 240) ---
                   - { button: { x: 130, y: 240, width: 90, height: 90, id: btn_Tab1_id10, widgets: [ {image: {src: humidifier_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Humidifier", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: smart_humidifier] } } }
                   - { button: { x: 270, y: 240, width: 90, height: 90, id: btn_Tab1_id11, widgets: [ {image: {src: purifier_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Purifier", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: air_purifier] } } }
-                  - { button: { x: 410, y: 240, width: 90, height: 90, id: btn_Tab1_id12, widgets: [ {image: {src: pc_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "PC", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pc_switch] } } }
-                  - { button: { x: 550, y: 240, width: 90, height: 90, id: btn_Tab1_id13, widgets: [ {image: {src: lan_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "PC LAN", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pc_lan_switch] } } }
+                  - { button: { x: 410, y: 240, width: 90, height: 90, id: btn_Tab1_id17, widgets: [ {image: {src: fish_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "BettaLight", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: betta2_enchufe] } } }
+                  - { button: { x: 550, y: 240, width: 90, height: 90, id: btn_Tab1_id18, widgets: [ {image: {src: lightbulb_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "LuzTecho", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: techo_enchufe] } } }
+                                                   
                 # --- Volume ---
                   - { button: { x: 10, y: 240, width: 55, height: 55, id: btn_Tab1_id14, widgets: [ {image: {src: imgVolUp, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Up", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: homeUp] } } }
                   - { button: { x: 700, y: 240, width: 55, height: 55, id: btn_Tab1_id15, widgets: [ {image: {src: imgVolDown, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Down", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: homeDown] } } }
@@ -1052,13 +1124,22 @@ lvgl:
 
               - name: "3D Room"
                 widgets:
+                # --- FILA 1 (y: 20) ---
                   - { button: { x: 60, y: 20, width: 90, height: 90, id: btn_Tab2_id0, widgets: [{image: {src: hexagon_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Hexagons", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: hex_led]} } }
                   - { button: { x: 200, y: 20, width: 90, height: 90, id: btn_Tab2_id1, widgets: [{image: {src: pump_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "BettaPump", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: bettapump_enchufe]} } }
                   - { button: { x: 340, y: 20, width: 90, height: 90, id: btn_Tab2_id2, widgets: [{image: {src: fish_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "BettaLight", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: BettaLight_enchufe]} } }
                   - { button: { x: 480, y: 20, width: 90, height: 90, id: btn_Tab2_id3, widgets: [{image: {src: i3d_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Aquila", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: aquila_enchufe]} } }
                   - { button: { x: 620, y: 20, width: 90, height: 90, id: btn_Tab2_id4, widgets: [{image: {src: i3d_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Cr10S", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: cr10s_enchufe]} } }
-                  - { button: { x: 270, y: 130, width: 90, height: 90, id: btn_Tab2_id5, widgets: [{image: {src: anycubic_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Anycubic", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: anycubic_enchufe]} } }
-                  - { button: { x: 410, y: 130, width: 90, height: 90, id: btn_Tab2_id6, widgets: [{image: {src: led_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Gabinete", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: gabinete_enchufe]} } }
+                # --- FILA 2 (y: 130) ---  
+                  - { button: { x: 60, y: 130, width: 90, height: 90, id: btn_Tab2_id5, widgets: [{image: {src: anycubic_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Anycubic", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: anycubic_enchufe]} } }
+                  - { button: { x: 200, y: 130, width: 90, height: 90, id: btn_Tab2_id6, widgets: [{image: {src: led_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Gabinete", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: gabinete_enchufe]} } }
+                  - { button: { x: 340, y: 130, width: 90, height: 90, id: btn_Tab1_id12, widgets: [ {image: {src: pc_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "PC", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pc_switch] } } }
+                  - { button: { x: 480, y: 130, width: 90, height: 90, id: btn_Tab1_id13, widgets: [ {image: {src: lan_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "PC LAN", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: pc_lan_switch] } } }
+                  - { button: { x: 620, y: 130, width: 90, height: 90, id: btn_Tab2_id7, widgets: [ {image: {src: humidifier_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Sunlu", align: BOTTOM_MID}} ], on_click: { then: [switch.toggle: sunlu_enchufe] } } }
+                # --- FILA 3 (y: 240) ---  
+                  - { button: { x: 270, y: 240, width: 90, height: 90, id: btn_Tab2_id8, widgets: [{image: {src: pixel_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Pixel", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: pixel_enchufe]} } }
+                  - { button: { x: 410, y: 240, width: 90, height: 90, id: btn_Tab2_id9, widgets: [{image: {src: monitor_icon, align: TOP_MID, y: 5, image_recolor: my_white, image_recolor_opa: 100%}}, {label: {text: "Monitor", align: BOTTOM_MID}}], on_click: {then: [switch.toggle: monitor_enchufe]} } }
+                                                               
               - name: "Ajustes"
                 widgets:
                   - label:
@@ -1265,6 +1346,14 @@ lvgl:
             text_color: my_white
             text_align: RIGHT
 
+        - obj:
+            id: blackout_screen
+            width: 800
+            height: 480
+            x: 0
+            y: 0
+            bg_color: my_black
+            bg_opa: 100%
 
     
 
@@ -1288,6 +1377,10 @@ display:
     auto_clear_enabled: false
     color_order: RGB
     pclk_frequency: 14MHZ
+    reset_pin:
+      ch422g: ch422g_hub
+      number: 3
+      inverted: false # Asegúrate de que esto coincida con la lógica de arriba
     dimensions:
       width: 800
       height: 480
@@ -1301,9 +1394,6 @@ display:
       ignore_strapping_warning: true
     pclk_pin: 7
     pclk_inverted: true
-    reset_pin:
-      ch422g: ch422g_hub
-      number: 3
     hsync_back_porch: 40
     hsync_front_porch: 40
     hsync_pulse_width: 48
